@@ -5,6 +5,7 @@
 [![License](https://img.shields.io/github/license/x70b1/ansible-zonefile.svg)](https://github.com/x70b1/ansible-zonefile/blob/master/LICENSE)
 
 Maintain the existence and SOA settings for a zone file managed by [Knot DNS](https://www.knot-dns.cz/).
+
 This works fine together with [StackExchange/dnscontrol](https://github.com/StackExchange/dnscontrol).
 
 
@@ -24,7 +25,7 @@ Background knowledge of the structure of an [SOA record](https://en.wikipedia.or
 The module supports the following arguments:
 
 ```yaml
-- name: "Zonefiles"
+- name: "Zonefile"
   zonefile:
     name: example.org
     ttl: 14400
@@ -36,12 +37,13 @@ The module supports the following arguments:
     minimum: 600
 ```
 
-You can use a preformatted `rname` but you have to use escaped backslashes:
+You can use a preformatted `mname` and `rname` but you have to use escaped backslashes:
 
 ```yaml
 - name: "Zonefile"
   zonefile:
     ...
+    mname: ns1.example.org.
     rname: we\\.are\\.online.example.org.   # we.are.online@example.org
     ...
 ```

@@ -1,7 +1,7 @@
 # ansible-zonefile
 
-[![CI/CD](https://github.com/x70b1/ansible-zonefile/actions/workflows/shellcheck.yml/badge.svg?branch=main)](https://github.com/x70b1/ansible-zonefile/actions)
-[![GitHub contributors](https://img.shields.io/github/contributors/x70b1/ansible-zonefile.svg)](https://github.com/x70b1/ansible-zonefile/graphs/contributors)
+[![Actions](https://github.com/x70b1/ansible-zonefile/actions/workflows/shellcheck.yml/badge.svg)](https://github.com/x70b1/ansible-zonefile/actions)
+[![Contributors](https://img.shields.io/github/contributors/x70b1/ansible-zonefile.svg)](https://github.com/x70b1/ansible-zonefile/graphs/contributors)
 [![License](https://img.shields.io/github/license/x70b1/ansible-zonefile.svg)](https://github.com/x70b1/ansible-zonefile/blob/master/LICENSE)
 
 Maintain the existence and SOA settings for a zone file managed by [Knot DNS](https://www.knot-dns.cz/).

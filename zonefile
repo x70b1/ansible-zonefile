@@ -55,12 +55,19 @@ if [ "$knotc_error" -eq 0 ]; then
             diff_after="[$name.] $name. $ttl SOA $formatted_mname $formatted_rname $serial $refresh $retry $expire $minimum\n"
 
 
-            if [ ! "$_ansible_check_mode" = "True" ]; then
-                knotc_error zone-begin "$name" >> /dev/null
-                knotc zone-set "$name" @ "$ttl" SOA "$formatted_mname" "$formatted_rname" "$serial" "$refresh" "$retry" "$expire" "$minimum" >> /dev/null
-                knotc zone-commit "$name" >> /dev/null
+            if [ "$_ansible_check_mode" = "False" ]; then
+                knotc zone-begin "$name" >> /dev/null
+                knotc zone-set "$name" "@" "$ttl" "SOA" "$formatted_mname $formatted_rname $serial $refresh $retry $expire $minimum" >> /dev/null
 
-                diff_after="$(knotc zone-read "$name" @ SOA)\n"
+                knotc_commit="$(knotc zone-commit "$name")"
+                knotc_error=$?
+
+                if [ "$knotc_error" -ne 0 ]; then
+                    result_failed=true
+                    result_msg="$(echo "$knotc_commit" | cut -d ' ' -f 2-)"
+                else
+                    diff_after="$(knotc zone-read "$name" @ SOA)\n"
+                fi
             fi
         fi
     else
@@ -68,14 +75,21 @@ if [ "$knotc_error" -eq 0 ]; then
         result_msg="Set up $name"
 
 
-        if [ ! "$_ansible_check_mode" = "True" ]; then
-            knotc conf-begin
-            knotc conf-set zone.domain "$name"
-            knotc conf-commit
+        if [ "$_ansible_check_mode" = "False" ]; then
+            knotc conf-begin >> /dev/null
+            knotc conf-set zone.domain "$name" >> /dev/null
+            knotc conf-commit >> /dev/null
 
-            knotc zone-begin "$name"
-            knotc zone-set "$name" @ "$ttl" SOA "$formatted_mname" "$formated_rname" "$(date '+%Y%m%d')01" "$refresh" "$retry" "$expire" "$minimum"
-            knotc zone-commit "$name"
+            knotc zone-begin "$name" >> /dev/null
+            knotc zone-set "$name" "@" "$ttl" "SOA" "$formatted_mname $formatted_rname $(date '+%Y%m%d')01 $refresh $retry $expire $minimum" >> /dev/null
+
+            knotc_commit="$(knotc zone-commit "$name")"
+            knotc_error=$?
+
+            if [ "$knotc_error" -ne 0 ]; then
+                result_failed=true
+                result_msg="$(echo "$knotc_commit" | cut -d ' ' -f 2)"
+            fi
         fi
     fi
 elif [ "$knotc_error" -eq 127 ]; then

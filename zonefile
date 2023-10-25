@@ -1,5 +1,5 @@
 #!/bin/bash
-# shellcheck disable=SC1090,SC2154
+# shellcheck disable=SC1090,SC2154,SC2129
 
 source "$1"
 
@@ -15,6 +15,21 @@ knotc_list=$(knotc conf-read zone.domain 2>&1)
 knotc_error=$?
 
 if [ "$knotc_error" -eq 0 ]; then
+    if [ "${mname: -1}" != "." ]; then
+        formatted_mname="$mname."
+    else
+        formatted_mname="$mname"
+    fi
+
+    if [[ "$rname" == *"@"* ]]; then
+        rname_user="$(echo "$rname" | cut -d '@' -f 1)"
+        rname_domain="$(echo "$rname" | cut -d '@' -f 2)"
+
+        formatted_rname="$rname_user.$rname_domain."
+    else
+        formatted_rname="$rname"
+    fi
+
     if echo "$knotc_list" | grep -q "zone.domain = $name."; then
         current_soa=$(knotc zone-read "$name" @ SOA)
         current_ttl=$(echo "$current_soa" | cut -d ' ' -f 3)
@@ -25,12 +40,7 @@ if [ "$knotc_error" -eq 0 ]; then
         current_expire=$(echo "$current_soa" | cut -d ' ' -f 10)
         current_minimum=$(echo "$current_soa" | cut -d ' ' -f 11)
 
-        if [ "$ttl" != "$current_ttl" ] || [ "$mname" != "$current_mname" ] || [ "$rname" != "$current_rname" ] || [ "$refresh" != "$current_refresh" ] || [ "$retry" != "$current_retry" ] || [ "$expire" != "$current_expire" ] || [ "$minimum" != "$current_minimum" ]; then
-            result_changed="true"
-            diff_before="$(knotc zone-read "$name" @ SOA)\n"
-            diff_after="[$name.] $name. $ttl SOA $mname $rname $serial $refresh $retry $expire $minimum\n"
-
-
+        if [ "$ttl" != "$current_ttl" ] || [ "$formatted_mname" != "$current_mname" ] || [ "$formatted_rname" != "$current_rname" ] || [ "$refresh" != "$current_refresh" ] || [ "$retry" != "$current_retry" ] || [ "$expire" != "$current_expire" ] || [ "$minimum" != "$current_minimum" ]; then
             current_serial=$(echo "$current_soa" | cut -d ' ' -f 7)
 
             if [ "${current_serial:0:8}" = "$(date '+%Y%m%d')" ]; then
@@ -40,9 +50,14 @@ if [ "$knotc_error" -eq 0 ]; then
             fi
 
 
+            result_changed="true"
+            diff_before="$(knotc zone-read "$name" @ SOA)\n"
+            diff_after="[$name.] $name. $ttl SOA $formatted_mname $formatted_rname $serial $refresh $retry $expire $minimum\n"
+
+
             if [ ! "$_ansible_check_mode" = "True" ]; then
-                knotc zone-begin "$name" >> /dev/null
-                knotc zone-set "$name" @ "$ttl" SOA "$mname" "$rname" "$serial" "$refresh" "$retry" "$expire" "$minimum" >> /dev/null
+                knotc_error zone-begin "$name" >> /dev/null
+                knotc zone-set "$name" @ "$ttl" SOA "$formatted_mname" "$formatted_rname" "$serial" "$refresh" "$retry" "$expire" "$minimum" >> /dev/null
                 knotc zone-commit "$name" >> /dev/null
 
                 diff_after="$(knotc zone-read "$name" @ SOA)\n"
@@ -59,7 +74,7 @@ if [ "$knotc_error" -eq 0 ]; then
             knotc conf-commit
 
             knotc zone-begin "$name"
-            knotc zone-set "$name" @ "$ttl" SOA "$mname" "$rname" "$(date '+%Y%m%d')01" "$refresh" "$retry" "$expire" "$minimum"
+            knotc zone-set "$name" @ "$ttl" SOA "$formatted_mname" "$formated_rname" "$(date '+%Y%m%d')01" "$refresh" "$retry" "$expire" "$minimum"
             knotc zone-commit "$name"
         fi
     fi

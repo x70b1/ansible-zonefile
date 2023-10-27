@@ -3,6 +3,7 @@
 
 source "$1"
 
+
 result_failed=false
 result_changed=false
 result_msg=""
@@ -11,93 +12,120 @@ diff_before=""
 diff_after=""
 
 
-knotc_list=$(knotc conf-read zone.domain 2>&1)
-knotc_error=$?
+if [ -z "$name" ]; then
+    result_failed=true
+    result_msg="name is required"
+elif [ -z "$ttl" ]; then
+    result_failed=true
+    result_msg="ttl is required"
+elif [ -z "$mname" ]; then
+    result_failed=true
+    result_msg="mname is required"
+elif [ -z "$rname" ]; then
+    result_failed=true
+    result_msg="rname is required"
+elif [ -z "$refresh" ]; then
+    result_failed=true
+    result_msg="refresh is required"
+elif [ -z "$retry" ]; then
+    result_failed=true
+    result_msg="retry is required"
+elif [ -z "$expire" ]; then
+    result_failed=true
+    result_msg="expire is required"
+elif [ -z "$minimum" ]; then
+    result_failed=true
+    result_msg="minimum is required"
+else
+    knotc_list=$(knotc conf-read zone.domain 2>&1)
+    knotc_error=$?
 
-if [ "$knotc_error" -eq 0 ]; then
-    if [ "${mname: -1}" != "." ]; then
-        formatted_mname="$mname."
-    else
-        formatted_mname="$mname"
-    fi
+    if [ "$knotc_error" -eq 0 ]; then
+        if [ "${mname: -1}" != "." ]; then
+            formatted_mname="$mname."
+        else
+            formatted_mname="$mname"
+        fi
 
-    if [[ "$rname" == *"@"* ]]; then
-        rname_user="$(echo "$rname" | cut -d '@' -f 1)"
-        rname_domain="$(echo "$rname" | cut -d '@' -f 2)"
+        if [[ "$rname" == *"@"* ]]; then
+            rname_user="$(echo "$rname" | cut -d '@' -f 1)"
+            rname_domain="$(echo "$rname" | cut -d '@' -f 2)"
 
-        formatted_rname="$rname_user.$rname_domain."
-    else
-        formatted_rname="$rname"
-    fi
+            formatted_rname="$rname_user.$rname_domain."
+        else
+            formatted_rname="$rname"
+        fi
 
-    if echo "$knotc_list" | grep -q "zone.domain = $name."; then
-        current_soa=$(knotc zone-read "$name" @ SOA)
-        current_ttl=$(echo "$current_soa" | cut -d ' ' -f 3)
-        current_mname=$(echo "$current_soa" | cut -d ' ' -f 5)
-        current_rname=$(echo "$current_soa" | cut -d ' ' -f 6)
-        current_refresh=$(echo "$current_soa" | cut -d ' ' -f 8)
-        current_retry=$(echo "$current_soa" | cut -d ' ' -f 9)
-        current_expire=$(echo "$current_soa" | cut -d ' ' -f 10)
-        current_minimum=$(echo "$current_soa" | cut -d ' ' -f 11)
 
-        if [ "$ttl" != "$current_ttl" ] || [ "$formatted_mname" != "$current_mname" ] || [ "$formatted_rname" != "$current_rname" ] || [ "$refresh" != "$current_refresh" ] || [ "$retry" != "$current_retry" ] || [ "$expire" != "$current_expire" ] || [ "$minimum" != "$current_minimum" ]; then
-            current_serial=$(echo "$current_soa" | cut -d ' ' -f 7)
+        if echo "$knotc_list" | grep -q "zone.domain = $name."; then
+            current_soa=$(knotc zone-read "$name" @ SOA)
+            current_ttl=$(echo "$current_soa" | cut -d ' ' -f 3)
+            current_mname=$(echo "$current_soa" | cut -d ' ' -f 5)
+            current_rname=$(echo "$current_soa" | cut -d ' ' -f 6)
+            current_refresh=$(echo "$current_soa" | cut -d ' ' -f 8)
+            current_retry=$(echo "$current_soa" | cut -d ' ' -f 9)
+            current_expire=$(echo "$current_soa" | cut -d ' ' -f 10)
+            current_minimum=$(echo "$current_soa" | cut -d ' ' -f 11)
 
-            if [ "${current_serial:0:8}" = "$(date '+%Y%m%d')" ]; then
-                serial=$((current_serial + 1))
-            else
-                serial="$(date '+%Y%m%d')01"
+            if [ "$ttl" != "$current_ttl" ] || [ "$formatted_mname" != "$current_mname" ] || [ "$formatted_rname" != "$current_rname" ] || [ "$refresh" != "$current_refresh" ] || [ "$retry" != "$current_retry" ] || [ "$expire" != "$current_expire" ] || [ "$minimum" != "$current_minimum" ]; then
+                current_serial=$(echo "$current_soa" | cut -d ' ' -f 7)
+
+                if [ "${current_serial:0:8}" = "$(date '+%Y%m%d')" ]; then
+                    serial=$((current_serial + 1))
+                else
+                    serial="$(date '+%Y%m%d')01"
+                fi
+
+
+                result_changed="true"
+                diff_before="$(knotc zone-read "$name" @ SOA)\n"
+                diff_after="[$name.] $name. $ttl SOA $formatted_mname $formatted_rname $serial $refresh $retry $expire $minimum\n"
+
+
+                if [ "$_ansible_check_mode" = "False" ]; then
+                    knotc zone-begin "$name" >> /dev/null
+                    knotc zone-set "$name" "@" "$ttl" "SOA" "$formatted_mname $formatted_rname $serial $refresh $retry $expire $minimum" >> /dev/null
+
+                    knotc_commit="$(knotc zone-commit "$name")"
+                    knotc_error=$?
+
+                    if [ "$knotc_error" -ne 0 ]; then
+                        result_failed=true
+                        result_msg="$(echo "$knotc_commit" | cut -d ' ' -f 2-)"
+                    else
+                        diff_after="$(knotc zone-read "$name" @ SOA)\n"
+                    fi
+                fi
             fi
-
-
+        else
             result_changed="true"
-            diff_before="$(knotc zone-read "$name" @ SOA)\n"
-            diff_after="[$name.] $name. $ttl SOA $formatted_mname $formatted_rname $serial $refresh $retry $expire $minimum\n"
+            result_msg="Set up $name"
 
 
             if [ "$_ansible_check_mode" = "False" ]; then
+                knotc conf-begin >> /dev/null
+                knotc conf-set zone.domain "$name" >> /dev/null
+                knotc conf-commit >> /dev/null
+
                 knotc zone-begin "$name" >> /dev/null
-                knotc zone-set "$name" "@" "$ttl" "SOA" "$formatted_mname $formatted_rname $serial $refresh $retry $expire $minimum" >> /dev/null
+                knotc zone-set "$name" "@" "$ttl" "SOA" "$formatted_mname $formatted_rname $(date '+%Y%m%d')01 $refresh $retry $expire $minimum" >> /dev/null
 
                 knotc_commit="$(knotc zone-commit "$name")"
                 knotc_error=$?
 
                 if [ "$knotc_error" -ne 0 ]; then
                     result_failed=true
-                    result_msg="$(echo "$knotc_commit" | cut -d ' ' -f 2-)"
-                else
-                    diff_after="$(knotc zone-read "$name" @ SOA)\n"
+                    result_msg="$(echo "$knotc_commit" | cut -d ' ' -f 2)"
                 fi
             fi
         fi
+    elif [ "$knotc_error" -eq 127 ]; then
+        result_failed=true
+        result_msg="knotc binary not found!"
     else
-        result_changed="true"
-        result_msg="Set up $name"
-
-
-        if [ "$_ansible_check_mode" = "False" ]; then
-            knotc conf-begin >> /dev/null
-            knotc conf-set zone.domain "$name" >> /dev/null
-            knotc conf-commit >> /dev/null
-
-            knotc zone-begin "$name" >> /dev/null
-            knotc zone-set "$name" "@" "$ttl" "SOA" "$formatted_mname $formatted_rname $(date '+%Y%m%d')01 $refresh $retry $expire $minimum" >> /dev/null
-
-            knotc_commit="$(knotc zone-commit "$name")"
-            knotc_error=$?
-
-            if [ "$knotc_error" -ne 0 ]; then
-                result_failed=true
-                result_msg="$(echo "$knotc_commit" | cut -d ' ' -f 2)"
-            fi
-        fi
+        result_failed=true
+        result_msg="$(echo "$knotc_list" | cut -d ' ' -f 2-)"
     fi
-elif [ "$knotc_error" -eq 127 ]; then
-    result_failed=true
-    result_msg="knotc binary not found!"
-else
-    result_failed=true
-    result_msg="$(echo "$knotc_list" | cut -d ' ' -f 2-)"
 fi
 
 

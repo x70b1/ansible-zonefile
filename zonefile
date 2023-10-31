@@ -62,21 +62,20 @@ else
             current_ttl=$(echo "$current_soa" | cut -d ' ' -f 3)
             current_mname=$(echo "$current_soa" | cut -d ' ' -f 5)
             current_rname=$(echo "$current_soa" | cut -d ' ' -f 6)
+            current_serial=$(echo "$current_soa" | cut -d ' ' -f 7)
             current_refresh=$(echo "$current_soa" | cut -d ' ' -f 8)
             current_retry=$(echo "$current_soa" | cut -d ' ' -f 9)
             current_expire=$(echo "$current_soa" | cut -d ' ' -f 10)
             current_minimum=$(echo "$current_soa" | cut -d ' ' -f 11)
 
+            if [ "${current_serial:0:8}" = "$(date '+%Y%m%d')" ]; then
+                serial=$((current_serial + 1))
+            else
+                serial="$(date '+%Y%m%d')01"
+            fi
+
+
             if [ "$ttl" != "$current_ttl" ] || [ "$formatted_mname" != "$current_mname" ] || [ "$formatted_rname" != "$current_rname" ] || [ "$refresh" != "$current_refresh" ] || [ "$retry" != "$current_retry" ] || [ "$expire" != "$current_expire" ] || [ "$minimum" != "$current_minimum" ]; then
-                current_serial=$(echo "$current_soa" | cut -d ' ' -f 7)
-
-                if [ "${current_serial:0:8}" = "$(date '+%Y%m%d')" ]; then
-                    serial=$((current_serial + 1))
-                else
-                    serial="$(date '+%Y%m%d')01"
-                fi
-
-
                 result_changed="true"
                 diff_before="$(knotc zone-read "$name" @ SOA)\n"
                 diff_after="[$name.] $name. $ttl SOA $formatted_mname $formatted_rname $serial $refresh $retry $expire $minimum\n"
@@ -98,6 +97,9 @@ else
                 fi
             fi
         else
+            serial="$(date '+%Y%m%d')01"
+
+
             result_changed="true"
             result_msg="Set up $name"
 
@@ -108,7 +110,7 @@ else
                 knotc conf-commit >> /dev/null
 
                 knotc zone-begin "$name" >> /dev/null
-                knotc zone-set "$name" "@" "$ttl" "SOA" "$formatted_mname $formatted_rname $(date '+%Y%m%d')01 $refresh $retry $expire $minimum" >> /dev/null
+                knotc zone-set "$name" "@" "$ttl" "SOA" "$formatted_mname $formatted_rname $serial $refresh $retry $expire $minimum" >> /dev/null
 
                 knotc_commit="$(knotc zone-commit "$name")"
                 knotc_error=$?
@@ -132,13 +134,13 @@ fi
 if [ "$result_failed" = true ]; then
     printf '{"failed": true, "msg": "%s"}\n' "$result_msg"
 else
-    if [ "$result_changed" = false ]; then
-        printf '{"changed": false, "name": "%s", "ttl": %d, "mname": "%s", "rname": "%s", "refresh": %d, "retry": %d, "expire": %d, "minimum": %d}\n' "$name" "$ttl" "$mname" "$rname" "$refresh" "$retry" "$expire" "$minimum"
-    else
+    if [ "$result_changed" = true ]; then
         if [ -n "$diff_before" ] && [ -n "$diff_after" ]; then
             result_diff="$(printf '"diff": {"before": "%s", "before_header": "%s @ SOA", "after": "%s", "after_header": "%s @ SOA"}, ' "$diff_before" "$name" "$diff_after" "$name")"
         fi
 
-        printf '{"changed": true, "msg": "%s", %s"name": "%s", "ttl": %d, "mname": "%s", "rname": "%s", "refresh": %d, "retry": %d, "expire": %d, "minimum": %d}\n' "$result_msg" "$result_diff" "$name" "$ttl" "$mname" "$rname" "$refresh" "$retry" "$expire" "$minimum"
+        printf '{"changed": true, "msg": "%s", %s"name": "%s", "ttl": %d, "mname": "%s", "rname": "%s", "serial": %d, "refresh": %d, "retry": %d, "expire": %d, "minimum": %d}\n' "$result_msg" "$result_diff" "$name" "$ttl" "$mname" "$rname" "$serial" "$refresh" "$retry" "$expire" "$minimum"
+    else
+        printf '{"changed": false, "name": "%s", "ttl": %d, "mname": "%s", "rname": "%s", "serial": %d, "refresh": %d, "retry": %d, "expire": %d, "minimum": %d}\n' "$name" "$ttl" "$mname" "$rname" "$serial" "$refresh" "$retry" "$expire" "$minimum"
     fi
 fi
